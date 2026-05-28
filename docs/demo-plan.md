@@ -1,5 +1,4 @@
 ## Demo Plan
-----
 1.หน้า Dashboard ของระบบ
 2.การกดปุ่ม “Feed”
 3.ระบบเปลี่ยนไปหน้า “Feeding Success”
