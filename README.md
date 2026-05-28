@@ -31,3 +31,19 @@ Dashboard / Mobile View
   ↓ 
  User
 ```
+## Scope Cut Table (ตัด scope อย่างเป็นทางการ)
+| Must Finish for Demo | Can Demo with Workaround | Cut for Sprint 3 |
+| --- | --- | --- |
+| ESP32 ควบคุม Servo ได้ | ใช้ปุ่ม local แทน dashboard | ระบบแจ้งเตือน LINE |
+| ปล่อยอาหารอัตโนมัติได้ | ใช้ video backup | AI วิเคราะห์พฤติกรรมสัตว์ |
+| Dashboard แสดงสถานะได้ | refresh manual | ระบบ login ผู้ใช้ |
+
+
+
+
+
+
+
+
+
+
