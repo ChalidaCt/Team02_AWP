@@ -58,6 +58,29 @@ Prototype v1 ของทีม AWP Tech สามารถจำลองกา
 * ระบบ Login และ Notification ยังไม่ได้พัฒนา
 * Demo บางส่วนยังใช้ Figma Prototype และ Screen Recording เป็น workaround
 
+## Known Issues 
+Prototype v1 ยังเชื่อม Hardware และ Dashboard แบบ Real-time ได้ไม่สมบูรณ์ จึงยังใช้ Figma Prototype และ Demo Video เป็น workaround บางส่วน
+
+## Sprint 4 Test Plan
+| หัวข้อ | คำตอบ |
+| --- | --- |
+| ผู้ใช้ที่จะทดสอบ | เจ้าของสัตว์เลี้ยง 2-3 คน |
+| Task ที่ให้ลองทำ | กด Feed และดูสถานะการให้อาหาร |
+| สิ่งที่จะสังเกต | ผู้ใช้เข้าใจการใช้งานหรือไม่ |
+| วิธีเก็บ feedback | แบบสอบถาม + สัมภาษณ์ |
+| ตัวชี้วัดเบื้องต้น | ความเข้าใจในการใช้งานและความพึงพอใจ |
+| สิ่งที่ต้องเตรียมก่อน Test | Prototype, Demo Video, Feedback Form |
+
+## Build Log
+| รายการ | คำตอบ |
+| --- | --- |
+| สิ่งที่ทำเสร็จจริง 3 อันดับแรก | 1) Dashboard Prototype 2) Feed Flow 3) GitHub Evidence |
+| สิ่งที่ยังไม่เสร็จ | เชื่อม Hardware กับ Dashboard จริง |
+| สิ่งที่ตัดออกจาก Sprint 3 | ระบบ Login และ AI |
+| สิ่งที่ใช้ workaround | ใช้ Figma Prototype และ Demo Video |
+| blocker สำคัญที่เจอ | ESP32 ยังเชื่อม MQTT ไม่สมบูรณ์ |
+| วิธีแก้หรือแผนรับมือ | ใช้ Screen Recording และ Prototype Demo |
+
 
 
 
