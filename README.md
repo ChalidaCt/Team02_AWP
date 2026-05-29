@@ -38,7 +38,7 @@ Dashboard / Mobile View
 | ปล่อยอาหารอัตโนมัติได้ | ใช้ video backup | AI วิเคราะห์พฤติกรรมสัตว์ |
 | Dashboard แสดงสถานะได้ | refresh manual | ระบบ login ผู้ใช้ |
 
-## ## Prototype: ระบบตอนนี้ทำอะไรได้บ้าง
+##  Prototype: ระบบตอนนี้ทำอะไรได้บ้าง
 
 Prototype v1 ของทีม AWP Tech สามารถจำลองการทำงานของระบบให้อาหารสัตว์ผ่านมือถือได้ในระดับเบื้องต้น โดยมีความสามารถดังนี้
 
@@ -50,7 +50,7 @@ Prototype v1 ของทีม AWP Tech สามารถจำลองกา
 * มี GitHub Repository สำหรับรวม evidence, README และเอกสารของทีม
 * มี Integration Map และ Demo Flow สำหรับอธิบายการทำงานของระบบ
 
-### สิ่งที่ยังทำไม่ได้ใน Prototype ตอนนี้
+## สิ่งที่ยังทำไม่ได้ใน Prototype ตอนนี้
 
 * Hardware ยังไม่เชื่อมกับ Dashboard แบบ Real-time
 * MQTT/Firebase ยังทำงานไม่สมบูรณ์
