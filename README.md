@@ -38,6 +38,25 @@ Dashboard / Mobile View
 | ปล่อยอาหารอัตโนมัติได้ | ใช้ video backup | AI วิเคราะห์พฤติกรรมสัตว์ |
 | Dashboard แสดงสถานะได้ | refresh manual | ระบบ login ผู้ใช้ |
 
+## ## Prototype: ระบบตอนนี้ทำอะไรได้บ้าง
+
+Prototype v1 ของทีม AWP Tech สามารถจำลองการทำงานของระบบให้อาหารสัตว์ผ่านมือถือได้ในระดับเบื้องต้น โดยมีความสามารถดังนี้
+
+* ผู้ใช้สามารถกดปุ่ม “Feed” ผ่านหน้า Dashboard บนมือถือได้
+* ระบบแสดง flow การให้อาหารผ่าน Figma Prototype
+* เมื่อกดปุ่ม ระบบจะเปลี่ยนไปยังหน้า “Feeding Success” เพื่อจำลองการให้อาหารสำเร็จ
+* มีการออกแบบ User Flow และหน้าจอการใช้งานหลักของระบบแล้ว
+* ESP32 และ Servo Motor เริ่มมีการศึกษาและทดสอบการเชื่อมต่อเบื้องต้น
+* มี GitHub Repository สำหรับรวม evidence, README และเอกสารของทีม
+* มี Integration Map และ Demo Flow สำหรับอธิบายการทำงานของระบบ
+
+### สิ่งที่ยังทำไม่ได้ใน Prototype ตอนนี้
+
+* Hardware ยังไม่เชื่อมกับ Dashboard แบบ Real-time
+* MQTT/Firebase ยังทำงานไม่สมบูรณ์
+* Servo Motor ยังปล่อยอาหารจริงได้ไม่เสถียร
+* ระบบ Login และ Notification ยังไม่ได้พัฒนา
+* Demo บางส่วนยังใช้ Figma Prototype และ Screen Recording เป็น workaround
 
 
 
