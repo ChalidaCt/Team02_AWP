@@ -20,7 +20,7 @@
 - Observation Sheet ที่ทีมจดระหว่าง test
 - คำตอบจาก Google Form
 - สรุป feedback หลังการสัมภาษณ์
-- 
+
 ## 5. Decision — จะใช้ feedback เพื่อตัดสินใจอะไรใน Sprint 5
 - ปรับปรุง UI/UX ให้ผู้ใช้เข้าใจ Flow ง่ายขึ้น
 - แก้จุดที่ผู้ใช้สับสนหรือหา feature ไม่เจอ
