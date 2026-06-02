@@ -81,11 +81,23 @@ Prototype v1 ยังเชื่อม Hardware และ Dashboard แบบ 
 | blocker สำคัญที่เจอ | ESP32 ยังเชื่อม MQTT ไม่สมบูรณ์ |
 | วิธีแก้หรือแผนรับมือ | ใช้ Screen Recording และ Prototype Demo |
 
+## Prototype v1 Readiness Check
+| รายการ | สถานะ | หลักฐาน / Link |
+| --- | --- | --- |
+| Prototype เปิดดูหรือทดลองได้ | Not Ready | **https://www.figma.com/design/H8l9tqdH1FPdleAadD9BW5/Untitled?node-id=0-1&t=1z1TLCtX6bUOLZ6L-1** |
+| Core Flow หลักยังอยู่ครบ | Partly Ready  | https://github.com/ChalidaCt/Team02_AWP/blob/main/docs/core-flow.md |
+| มี demo link / file / device / Figma / notebook |  Not Ready |  |
+| มี known issues ที่ทีมรู้อยู่แล้ว | มี  | https://github.com/ChalidaCt/Team02_AWP/blob/main/README.md |
+| มี workaround ถ้าระบบพัง | ไม่มี | - |
+| ผู้ใช้สามารถลอง task ได้โดยไม่ต้องอธิบายยาว | Not Ready | - |
 
-
-
-
-
-
+## Prototype v1 ที่จะใช้ทดสอบ
+| รายการ | คำตอบ |
+| --- | --- |
+| Prototype ที่ใช้ทดสอบคืออะไร | Prototype แอปพลิเคชัน Smart Pet Feeder สำหรับควบคุมและติดตามการให้อาหารสัตว์เลี้ยง |
+| Link / File / Device / Location | https://www.figma.com/design/H8l9tqdH1FPdleAadD9BW5/Untitled?node-id=0-1&p=f&t=wQH4u4hTNuhukDno-0 |
+| Core Flow ที่จะทดสอบ | เปิดแอป → ดูสถานะอาหาร → สั่งให้อาหาร → ตรวจสอบประวัติการให้อาหาร |
+| สิ่งที่ prototype ทำได้แล้ว | แสดงหน้าจอหลักของระบบ สามารถนำเสนอ Flow การใช้งานและการเชื่อมโยงระหว่างหน้าจอได้ |
+| ข้อจำกัดที่ต้องบอกผู้ใช้ก่อน test | Prototype ยังไม่สมบูรณ์ บางปุ่มหรือฟังก์ชันอาจยังไม่สามารถใช้งานได้จริง และยังไม่เชื่อมต่อกับอุปกรณ์ให้อาหารสัตว์จริง |
 
 
