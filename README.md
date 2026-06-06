@@ -100,4 +100,34 @@ Prototype v1 ยังเชื่อม Hardware และ Dashboard แบบ 
 | สิ่งที่ prototype ทำได้แล้ว | แสดงหน้าจอหลักของระบบ สามารถนำเสนอ Flow การใช้งานและการเชื่อมโยงระหว่างหน้าจอได้ |
 | ข้อจำกัดที่ต้องบอกผู้ใช้ก่อน test | Prototype ยังไม่สมบูรณ์ บางปุ่มหรือฟังก์ชันอาจยังไม่สามารถใช้งานได้จริง และยังไม่เชื่อมต่อกับอุปกรณ์ให้อาหารสัตว์จริง |
 
+## CP6 — User Testing Report + Iteration Plan
+| ส่วนของ CP6 | รายละเอียด | Link / Evidence |
+| --- | --- | --- |
+| 1. User Test Plan | ทดสอบผู้ใช้ 2 คน โดยให้ทำ 3 Tasks ได้แก่ ตั้งเวลาให้อาหาร, สั่งให้อาหารทันที และตรวจสอบอาหารคงเหลือ | https://drive.google.com/drive/folders/10PyIZJOIAbjr7yk_jkBHDrsF9deGocqK?usp=sharing |
+| 2. User Test Evidence | รูป วิดีโอ screenshot form response interview note | https://drive.google.com/drive/folders/1Y09eYLHLvu40kSWHA0mQr8ia_AQ4x_n8?usp=sharing |
+| 3. Feedback Summary | สรุป feedback ดิบจากผู้ใช้ | ผู้ใช้เข้าใจฟังก์ชันให้อาหารทันทีได้ดี แต่สับสนเมนูตั้งเวลาและข้อมูลอาหารคงเหลือ |
+| 4. Insight | ทีมเรียนรู้อะไรจาก feedback | https://github.com/ChalidaCt/Team02_AWP/blob/main/docs/insights.md |
+| 5. Priority Fix List | สิ่งที่ต้องแก้เรียงความสำคัญ | https://github.com/ChalidaCt/Team02_AWP/blob/main/docs/priority-fix-list.md |
+| 6. Prototype v2 Plan | จะปรับอะไรใน Sprint 5 | https://github.com/ChalidaCt/Team02_AWP/blob/main/docs/prototype-v2-plan.md |
+| 7. Updated Backlog | backlog สำหรับ Sprint 5 | https://github.com/ChalidaCt/Team02_AWP/blob/main/docs/sprint5-backlog.md |
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
