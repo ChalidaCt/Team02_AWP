@@ -113,7 +113,14 @@ Prototype v1 ยังเชื่อม Hardware และ Dashboard แบบ 
 
 ## Sprint 5 Goal
 ปรับปรุง Prototype v2 ให้ผู้ใช้เข้าใจขั้นตอนการให้อาหารและดูประวัติการให้อาหารได้ง่ายขึ้น จาก Feedback ที่พบว่าผู้ใช้สับสนบางเมนูและไม่เห็นสถานะการทำงานชัดเจน
-## prototype v2
+## Prototype v2 Scope Lock
+
+| Must Fix in Sprint 5 | Nice to Have | Not Doing / Later |
+| --- | --- | --- |
+| ปรับปรุงกลไกการจ่ายอาหารเพื่อลดการติดขัด | เพิ่มการแจ้งเตือนเมื่ออาหารใกล้หมด | ระบบแจ้งเตือนผ่าน Line Notify |
+| ปรับ Calibration ให้ปริมาณอาหารแม่นยำขึ้น | ปรับปรุงดีไซน์ UI ให้สวยงามขึ้น | การพัฒนา Mobile Application จริง |
+| ปรับปุ่ม Feed ให้ชัดเจน | เพิ่ม Animation | เชื่อม Hardware จริง
+
 ## demo link
 
 
