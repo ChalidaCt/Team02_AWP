@@ -112,13 +112,7 @@ Prototype v1 ยังเชื่อม Hardware และ Dashboard แบบ 
 | 7. Updated Backlog | backlog สำหรับ Sprint 5 | https://github.com/ChalidaCt/Team02_AWP/blob/main/docs/sprint5-backlog.md |
 
 ## Sprint 5 Goal
-ปรับปรุง Prototype v2 ของ Smart Pet Feeder โดยแก้ปัญหาเครื่องให้อาหารติดขัด ปรับความแม่นยำของปริมาณอาหาร และปรับ UI ให้ผู้ใช้ใช้งานได้ง่ายขึ้นจาก Feedback ใน Sprint 4
-| ชื่อสมาชิก | Role | Task ใน Sprint 5 | เกี่ยวกับ feedback ข้อใด | Evidence ที่ต้องส่ง | สถานะ |
-| --- | --- | --- | --- | --- | --- |
-| ณัฏฐกมล วัฒน์ปรีชากุล | Embedded / IoT Developer | ปรับ Servo Motor และระบบจ่ายอาหาร | เครื่องให้อาหารติดขัด | วิดีโอทดสอบการจ่ายอาหาร | Doing |
-| ชลิดา ฉิมทิม | Product / UX | ปรับปรุงหน้าแอป ปุ่ม Feed และแสดงสถานะการทำงานให้ชัดเจน | ผู้ใช้หาเมนูให้อาหารไม่เจอ และสับสนสถานะการทำงาน | Screenshot Before/After และ Prototype v2 | Doing |
-| ศศิวิมล บุญร่วม | Project Manager / Scrum Lead | วางแผน Sprint 5 ติดตามความคืบหน้าทีม จัดการ Feedback-to-Fix Mapping และรวบรวมเอกสาร CP7 | Feedback ทุกข้อจาก Sprint 4 | Sprint Plan, Meeting Note, CP7 Report และ Evidence Hub | Doing |
-
+ปรับปรุง Prototype v2 ให้ผู้ใช้เข้าใจขั้นตอนการให้อาหารและดูประวัติการให้อาหารได้ง่ายขึ้น จาก Feedback ที่พบว่าผู้ใช้สับสนบางเมนูและไม่เห็นสถานะการทำงานชัดเจน
 
 
 
