@@ -111,8 +111,8 @@ Prototype v1 ยังเชื่อม Hardware และ Dashboard แบบ 
 | 6. Prototype v2 Plan | จะปรับอะไรใน Sprint 5 | https://github.com/ChalidaCt/Team02_AWP/blob/main/docs/prototype-v2-plan.md |
 | 7. Updated Backlog | backlog สำหรับ Sprint 5 | https://github.com/ChalidaCt/Team02_AWP/blob/main/docs/sprint5-backlog.md |
 
-
-
+## Sprint 5 Goal
+ปรับปรุง Prototype v2 ของ Smart Pet Feeder โดยแก้ปัญหาเครื่องให้อาหารติดขัด ปรับความแม่นยำของปริมาณอาหาร และปรับ UI ให้ผู้ใช้ใช้งานได้ง่ายขึ้นจาก Feedback ใน Sprint 4
 
 
 
