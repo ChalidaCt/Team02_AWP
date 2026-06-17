@@ -1,563 +1,418 @@
-import 'dart:async';
-import 'dart:convert';
+#include <WiFi.h>
+#include <WebServer.h>
+#include <HTTPClient.h>
+#include <WiFiClientSecure.h>
+#include "HX711.h"
+#include <ESP32Servo.h>
 
-import 'package:flutter/material.dart';
-import 'package:http/http.dart' as http;
+// WiFi
+const char* ssid = "ame";
+const char* password = "ame4166288";
 
-import '../models/user_model.dart';
-import 'login_page.dart';
+// Firebase Realtime Database URL
+String firebaseUrl = "https://smart-pet-feeder-9d2a2-default-rtdb.asia-southeast1.firebasedatabase.app";
 
-class FeedingSchedule {
-  final String time;
-  final int amount;
-  bool enabled;
+// Servo
+#define SERVO_PIN 14
+Servo feederServo;
+int servoOpen = 90;
+int servoClose = 0;
 
-  FeedingSchedule({
-    required this.time,
-    required this.amount,
-    this.enabled = true,
-  });
+// HX711
+#define DT 4
+#define SCK 5
+HX711 scale;
+float calibration_factor = 1060.0;
+const float NOISE_GRAM = 8.0;
+
+// HC-SR04
+#define TRIG_PIN 26
+#define ECHO_PIN 27
+const float TANK_HEIGHT = 17.0;
+
+WebServer server(80);
+
+bool isFeeding = false;
+float stopBeforeGram = 3.0;
+
+void allowCORS() {
+  server.sendHeader("Access-Control-Allow-Origin", "*");
+  server.sendHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+  server.sendHeader("Access-Control-Allow-Headers", "Content-Type");
 }
 
-class DashboardPage extends StatefulWidget {
-  final UserData user;
-
-  const DashboardPage({
-    super.key,
-    required this.user,
-  });
-
-  @override
-  State<DashboardPage> createState() => _DashboardPageState();
+void openServo() {
+  feederServo.write(servoOpen);
+  Serial.println("Servo Open");
 }
 
-class _DashboardPageState extends State<DashboardPage> {
-  final String esp32Ip = 'http://172.20.10.4';
+void closeServo() {
+  feederServo.write(servoClose);
+  Serial.println("Servo Close");
+}
 
-  double currentWeight = 0;
-  double feedAmount = 50;
-  int foodLevel = 0;
+float getWeight() {
+  float weight = scale.get_units(20);
 
-  bool isOnline = false;
-  bool isFeeding = false;
+  if (weight < 0) weight = 0;
+  if (weight < NOISE_GRAM) weight = 0;
 
-  TimeOfDay selectedTime = TimeOfDay.now();
+  return weight;
+}
 
-  final List<FeedingSchedule> schedules = [];
-  final List<String> history = [];
+float readDistanceCM() {
+  digitalWrite(TRIG_PIN, LOW);
+  delayMicroseconds(2);
 
-  Timer? scheduleTimer;
-  final Set<String> fedToday = {};
+  digitalWrite(TRIG_PIN, HIGH);
+  delayMicroseconds(10);
 
-  @override
-  void initState() {
-    super.initState();
-    checkEsp32Status();
-    loadRealData();
+  digitalWrite(TRIG_PIN, LOW);
 
-    scheduleTimer = Timer.periodic(
-      const Duration(seconds: 10),
-      (_) => checkScheduleAndFeed(),
-    );
+  long duration = pulseIn(ECHO_PIN, HIGH, 30000);
+
+  if (duration == 0) {
+    Serial.println("HC-SR04 read failed");
+    return -1;
   }
 
-  Future<void> checkEsp32Status() async {
-    try {
-      final response = await http
-          .get(Uri.parse('$esp32Ip/status'))
-          .timeout(const Duration(seconds: 3));
+  return duration * 0.0343 / 2.0;
+}
 
-      setState(() {
-        isOnline = response.statusCode == 200;
-      });
-    } catch (e) {
-      setState(() {
-        isOnline = false;
-      });
+int calculateFoodPercent(float distance) {
+  if (distance < 0) return -1;
+
+  if (distance >= TANK_HEIGHT) return 0;
+  if (distance <= 0) return 100;
+
+  float percent = ((TANK_HEIGHT - distance) / TANK_HEIGHT) * 100.0;
+  return constrain((int)percent, 0, 100);
+}
+
+int getFoodLevelPercent() {
+  float distance = readDistanceCM();
+  return calculateFoodPercent(distance);
+}
+
+void updateFirebaseStatus(float weight, int foodLevel, float distance) {
+  if (WiFi.status() != WL_CONNECTED) return;
+
+  WiFiClientSecure client;
+  client.setInsecure();
+
+  HTTPClient http;
+
+  String url = firebaseUrl + "/device/status.json";
+
+  String json = "{";
+  json += "\"online\":true,";
+  json += "\"weight\":" + String(weight, 2) + ",";
+  json += "\"foodLevel\":" + String(foodLevel) + ",";
+  json += "\"distance\":" + String(distance, 1) + ",";
+  json += "\"feeding\":";
+  json += isFeeding ? "true" : "false";
+  json += "}";
+
+  http.begin(client, url);
+  http.addHeader("Content-Type", "application/json");
+
+  int code = http.PUT(json);
+
+  Serial.print("Firebase status code: ");
+  Serial.println(code);
+
+  http.end();
+}
+
+void resetFirebaseFeed() {
+  if (WiFi.status() != WL_CONNECTED) return;
+
+  WiFiClientSecure client;
+  client.setInsecure();
+
+  HTTPClient http;
+
+  String url = firebaseUrl + "/device/command/feed.json";
+
+  http.begin(client, url);
+  http.addHeader("Content-Type", "application/json");
+
+  int code = http.PUT("false");
+
+  Serial.print("Reset feed code: ");
+  Serial.println(code);
+
+  http.end();
+}
+
+int getAmountFromPayload(String payload) {
+  int amount = 50;
+
+  int index = payload.indexOf("\"amount\":");
+  if (index >= 0) {
+    String sub = payload.substring(index + 9);
+    amount = sub.toInt();
+  }
+
+  if (amount < 1) amount = 50;
+  if (amount > 300) amount = 300;
+
+  return amount;
+}
+
+void checkFirebaseCommand() {
+  if (WiFi.status() != WL_CONNECTED) return;
+  if (isFeeding) return;
+
+  WiFiClientSecure client;
+  client.setInsecure();
+
+  HTTPClient http;
+
+  String url = firebaseUrl + "/device/command.json";
+
+  http.begin(client, url);
+
+  int code = http.GET();
+
+  if (code == 200) {
+    String payload = http.getString();
+
+    Serial.print("Firebase command: ");
+    Serial.println(payload);
+
+    if (payload.indexOf("\"feed\":true") >= 0) {
+      int amount = getAmountFromPayload(payload);
+
+      Serial.println("Firebase Feed Command Received");
+      Serial.print("Amount: ");
+      Serial.println(amount);
+
+      feedFood(amount);
+
+      resetFirebaseFeed();
     }
+  } else {
+    Serial.print("Firebase command read failed: ");
+    Serial.println(code);
   }
 
-  Future<void> loadRealData() async {
-    try {
-      final levelResponse = await http
-          .get(Uri.parse('$esp32Ip/level'))
-          .timeout(const Duration(seconds: 3));
+  http.end();
+}
 
-      final weightResponse = await http
-          .get(Uri.parse('$esp32Ip/weight'))
-          .timeout(const Duration(seconds: 3));
+void feedFood(float targetGram) {
+  if (isFeeding) return;
 
-      if (levelResponse.statusCode == 200) {
-        final levelData = jsonDecode(levelResponse.body);
-        foodLevel = int.tryParse(levelData['level'].toString()) ?? 0;
-      }
+  isFeeding = true;
 
-      if (weightResponse.statusCode == 200) {
-        final weightData = jsonDecode(weightResponse.body);
-        currentWeight = double.tryParse(weightData['weight'].toString()) ?? 0;
-      }
+  Serial.println("Start Feeding");
+  Serial.print("Target: ");
+  Serial.print(targetGram);
+  Serial.println(" g");
 
-      setState(() {
-        isOnline = true;
-      });
-    } catch (e) {
-      setState(() {
-        isOnline = false;
-      });
-    }
+  int foodLevel = getFoodLevelPercent();
+
+  Serial.print("Food Level: ");
+  Serial.print(foodLevel);
+  Serial.println("%");
+
+  if (foodLevel >= 0 && foodLevel <= 10) {
+    Serial.println("Warning: Food level low");
   }
 
-  Future<void> feedNow({double? amount}) async {
-    final realAmount = amount ?? feedAmount;
+  scale.tare(30);
+  delay(300);
 
-    setState(() {
-      isFeeding = true;
-    });
+  float stopAt = targetGram - stopBeforeGram;
+  if (stopAt < 1) stopAt = targetGram;
 
-    try {
-      final url = Uri.parse('$esp32Ip/feed?amount=${realAmount.toInt()}');
+  openServo();
 
-      final response = await http.get(url).timeout(
-            const Duration(seconds: 25),
-          );
+  unsigned long startTime = millis();
+  unsigned long timeout = 20000;
 
-      if (response.statusCode == 200) {
-        setState(() {
-          history.insert(
-            0,
-            'ให้อาหาร ${realAmount.toInt()} กรัม สำเร็จ',
-          );
-        });
+  while (true) {
+    float weight = getWeight();
 
-        await loadRealData();
+    Serial.print("Weight: ");
+    Serial.print(weight, 2);
+    Serial.println(" g");
 
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('ให้อาหาร ${realAmount.toInt()} กรัม สำเร็จ')),
-        );
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('ESP32 ตอบกลับไม่สำเร็จ')),
-        );
-      }
-    } catch (e) {
-      setState(() {
-        isOnline = false;
-        history.insert(0, 'เชื่อมต่อ ESP32 ไม่ได้');
-      });
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('เชื่อมต่อ ESP32 ไม่ได้')),
-      );
+    if (weight >= stopAt) {
+      Serial.println("Target reached");
+      break;
     }
 
-    setState(() {
-      isFeeding = false;
-    });
-  }
-
-  Future<void> pickTime() async {
-    final picked = await showTimePicker(
-      context: context,
-      initialTime: selectedTime,
-    );
-
-    if (picked != null) {
-      setState(() {
-        selectedTime = picked;
-      });
+    if (millis() - startTime > timeout) {
+      Serial.println("Timeout");
+      break;
     }
+
+    delay(100);
   }
 
-  String formatTime(TimeOfDay time) {
-    return '${time.hour.toString().padLeft(2, '0')}:${time.minute.toString().padLeft(2, '0')}';
+  closeServo();
+
+  Serial.println("Feeding Done");
+
+  isFeeding = false;
+
+  float distance = readDistanceCM();
+  int percent = calculateFoodPercent(distance);
+  float weight = getWeight();
+
+  updateFirebaseStatus(weight, percent, distance);
+}
+
+void handleStatus() {
+  allowCORS();
+
+  String json = "{";
+  json += "\"status\":\"online\",";
+  json += "\"feeding\":";
+  json += isFeeding ? "true" : "false";
+  json += "}";
+
+  server.send(200, "application/json", json);
+}
+
+void handleLevel() {
+  allowCORS();
+
+  float distance = readDistanceCM();
+  int level = calculateFoodPercent(distance);
+
+  String json = "{";
+  json += "\"distance_cm\":";
+  json += String(distance, 1);
+  json += ",";
+  json += "\"level\":";
+  json += String(level);
+  json += ",";
+  json += "\"food_percent\":";
+  json += String(level);
+  json += "}";
+
+  server.send(200, "application/json", json);
+}
+
+void handleWeight() {
+  allowCORS();
+
+  float weight = getWeight();
+
+  String json = "{";
+  json += "\"weight\":";
+  json += String(weight, 2);
+  json += "}";
+
+  server.send(200, "application/json", json);
+}
+
+void handleFeed() {
+  allowCORS();
+
+  float amount = 50;
+
+  if (server.hasArg("amount")) {
+    amount = server.arg("amount").toFloat();
   }
 
-  void addSchedule() {
-    final time = formatTime(selectedTime);
+  feedFood(amount);
 
-    setState(() {
-      schedules.add(
-        FeedingSchedule(
-          time: time,
-          amount: feedAmount.toInt(),
-        ),
-      );
-    });
+  server.send(200, "text/plain", "Feed success");
+}
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('ตั้งเวลา $time สำเร็จ')),
-    );
+void handleOpen() {
+  allowCORS();
+  openServo();
+  server.send(200, "text/plain", "Servo opened");
+}
+
+void handleClose() {
+  allowCORS();
+  closeServo();
+  server.send(200, "text/plain", "Servo closed");
+}
+
+void setup() {
+  Serial.begin(115200);
+  delay(1000);
+
+  Serial.println("Smart Pet Feeder Firebase Start");
+
+  feederServo.attach(SERVO_PIN);
+  closeServo();
+  Serial.println("Servo Ready");
+
+  scale.begin(DT, SCK);
+  scale.set_scale(calibration_factor);
+
+  Serial.println("Put EMPTY bowl on Load Cell");
+  Serial.println("Tare in 5 seconds...");
+  delay(5000);
+
+  scale.tare(30);
+
+  Serial.println("Tare Complete");
+  Serial.println("Bowl = 0 g");
+  Serial.println("HX711 Ready");
+
+  pinMode(TRIG_PIN, OUTPUT);
+  pinMode(ECHO_PIN, INPUT);
+  Serial.println("HC-SR04 Ready");
+
+  WiFi.begin(ssid, password);
+  Serial.print("Connecting WiFi");
+
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(500);
+    Serial.print(".");
   }
 
-  void checkScheduleAndFeed() {
-    if (isFeeding) return;
+  Serial.println();
+  Serial.println("WiFi connected");
+  Serial.print("ESP32 IP: ");
+  Serial.println(WiFi.localIP());
 
-    final now = DateTime.now();
-    final currentTime =
-        '${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}';
+  server.on("/status", handleStatus);
+  server.on("/level", handleLevel);
+  server.on("/weight", handleWeight);
+  server.on("/feed", handleFeed);
+  server.on("/open", handleOpen);
+  server.on("/close", handleClose);
 
-    final today =
-        '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
+  server.begin();
+  Serial.println("Server started");
 
-    for (final item in schedules) {
-      final key = '$today-${item.time}';
+  float distance = readDistanceCM();
+  int percent = calculateFoodPercent(distance);
+  float weight = getWeight();
 
-      if (item.enabled && item.time == currentTime && !fedToday.contains(key)) {
-        fedToday.add(key);
+  updateFirebaseStatus(weight, percent, distance);
+}
 
-        setState(() {
-          history.insert(
-            0,
-            'ถึงเวลา ${item.time} ให้อาหารอัตโนมัติ ${item.amount} กรัม',
-          );
-        });
+void loop() {
+  server.handleClient();
 
-        feedNow(amount: item.amount.toDouble());
-      }
-    }
-  }
+  static unsigned long lastFirebase = 0;
 
-  void deleteSchedule(FeedingSchedule item) {
-    setState(() {
-      schedules.remove(item);
-    });
-  }
+  if (millis() - lastFirebase >= 3000) {
+    float distance = readDistanceCM();
+    int percent = calculateFoodPercent(distance);
+    float weight = getWeight();
 
-  void logout() {
-    Navigator.pushReplacement(
-      context,
-      MaterialPageRoute(
-        builder: (_) => const LoginPage(),
-      ),
-    );
-  }
+    Serial.print("Distance: ");
+    Serial.print(distance, 1);
+    Serial.print(" cm | Food Level: ");
+    Serial.print(percent);
+    Serial.print("% | Weight: ");
+    Serial.print(weight, 2);
+    Serial.println(" g");
 
-  @override
-  void dispose() {
-    scheduleTimer?.cancel();
-    super.dispose();
-  }
+    updateFirebaseStatus(weight, percent, distance);
+    checkFirebaseCommand();
 
-  Widget card(Widget child) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(18),
-      margin: const EdgeInsets.only(bottom: 16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(24),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.orange.withOpacity(0.12),
-            blurRadius: 12,
-            offset: const Offset(0, 6),
-          ),
-        ],
-      ),
-      child: child,
-    );
-  }
-
-  Widget header() {
-    return Container(
-      padding: const EdgeInsets.all(22),
-      margin: const EdgeInsets.only(bottom: 16),
-      decoration: BoxDecoration(
-        color: const Color(0xFFFFB86C),
-        borderRadius: BorderRadius.circular(28),
-      ),
-      child: Row(
-        children: [
-          const CircleAvatar(
-            radius: 34,
-            backgroundColor: Colors.white,
-            child: Icon(Icons.pets, color: Colors.orange, size: 40),
-          ),
-          const SizedBox(width: 14),
-          Expanded(
-            child: Text(
-              'Smart Pet Feeder\nผู้ใช้งาน: ${widget.user.username}',
-              style: const TextStyle(
-                color: Colors.white,
-                fontSize: 20,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-          ),
-          IconButton(
-            onPressed: logout,
-            icon: const Icon(Icons.logout, color: Colors.white),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget statusCard() {
-    return card(
-      Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text(
-            'สถานะเครื่องจริง',
-            style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
-          ),
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              Icon(
-                isOnline ? Icons.wifi : Icons.wifi_off,
-                color: isOnline ? Colors.green : Colors.red,
-              ),
-              const SizedBox(width: 8),
-              Text(
-                isOnline ? 'ESP32 ออนไลน์' : 'ESP32 ออฟไลน์',
-                style: TextStyle(
-                  color: isOnline ? Colors.green : Colors.red,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              const Spacer(),
-              IconButton(
-                onPressed: () async {
-                  await checkEsp32Status();
-                  await loadRealData();
-                },
-                icon: const Icon(Icons.refresh),
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          Text('IP เครื่อง: $esp32Ip'),
-          Text('น้ำหนักจาก Load Cell: ${currentWeight.toStringAsFixed(2)} กรัม'),
-          Text('อาหารในถังจาก HC-SR04: $foodLevel%'),
-          const SizedBox(height: 12),
-          LinearProgressIndicator(
-            value: foodLevel < 0 ? 0 : foodLevel / 100,
-            minHeight: 10,
-            color: foodLevel < 20 ? Colors.red : Colors.orange,
-            backgroundColor: const Color(0xFFFFE8CC),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            foodLevel < 0
-                ? 'อ่านค่า HC-SR04 ไม่ได้'
-                : foodLevel < 20
-                    ? 'อาหารใกล้หมด'
-                    : 'อาหารเพียงพอ',
-            style: TextStyle(
-              color: foodLevel < 20 ? Colors.red : Colors.green,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget feedCard() {
-    return card(
-      Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text(
-            'ให้อาหารทันที',
-            style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
-          ),
-          const SizedBox(height: 12),
-          Center(
-            child: Text(
-              '${feedAmount.toInt()} กรัม',
-              style: const TextStyle(
-                fontSize: 36,
-                color: Colors.orange,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-          ),
-          Slider(
-            value: feedAmount,
-            min: 10,
-            max: 300,
-            divisions: 29,
-            activeColor: Colors.orange,
-            onChanged: (value) {
-              setState(() {
-                feedAmount = value;
-              });
-            },
-          ),
-          SizedBox(
-            width: double.infinity,
-            height: 52,
-            child: ElevatedButton.icon(
-              onPressed: isFeeding ? null : () => feedNow(),
-              icon: const Icon(Icons.restaurant),
-              label: Text(isFeeding ? 'กำลังให้อาหาร...' : 'Feed Now'),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget scheduleCard() {
-    return card(
-      Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text(
-            'ตั้งเวลาให้อาหารจริง',
-            style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
-          ),
-          const SizedBox(height: 14),
-
-          Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: const Color(0xFFFFFAF4),
-              borderRadius: BorderRadius.circular(18),
-              border: Border.all(color: const Color(0xFFFFD7A8)),
-            ),
-            child: Row(
-              children: [
-                const CircleAvatar(
-                  backgroundColor: Colors.orange,
-                  child: Icon(Icons.schedule, color: Colors.white),
-                ),
-                const SizedBox(width: 14),
-                Expanded(
-                  child: Text(
-                    'เวลา: ${formatTime(selectedTime)} น.\nปริมาณ: ${feedAmount.toInt()} กรัม',
-                    style: const TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ),
-                TextButton.icon(
-                  onPressed: pickTime,
-                  icon: const Icon(Icons.access_time),
-                  label: const Text('เลือกเวลา'),
-                ),
-              ],
-            ),
-          ),
-
-          const SizedBox(height: 12),
-
-          SizedBox(
-            width: double.infinity,
-            height: 50,
-            child: OutlinedButton.icon(
-              onPressed: addSchedule,
-              icon: const Icon(Icons.add),
-              label: const Text('เพิ่มเวลาให้อาหาร'),
-              style: OutlinedButton.styleFrom(
-                foregroundColor: Colors.orange,
-                side: const BorderSide(color: Colors.orange),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(18),
-                ),
-              ),
-            ),
-          ),
-
-          const SizedBox(height: 16),
-
-          if (schedules.isEmpty)
-            const Text('ยังไม่มีเวลาที่ตั้งไว้')
-          else
-            ...schedules.map(
-              (item) => Container(
-                margin: const EdgeInsets.only(bottom: 10),
-                padding: const EdgeInsets.all(14),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFFFFAF4),
-                  borderRadius: BorderRadius.circular(18),
-                  border: Border.all(color: const Color(0xFFFFD7A8)),
-                ),
-                child: Row(
-                  children: [
-                    const CircleAvatar(
-                      backgroundColor: Colors.orange,
-                      child: Icon(Icons.alarm, color: Colors.white),
-                    ),
-                    const SizedBox(width: 14),
-                    Expanded(
-                      child: Text(
-                        '${item.time} น.\nให้อาหาร ${item.amount} กรัม',
-                        style: const TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ),
-                    Switch(
-                      value: item.enabled,
-                      activeColor: Colors.orange,
-                      onChanged: (value) {
-                        setState(() {
-                          item.enabled = value;
-                        });
-                      },
-                    ),
-                    IconButton(
-                      onPressed: () => deleteSchedule(item),
-                      icon: const Icon(
-                        Icons.delete_outline,
-                        color: Colors.red,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-        ],
-      ),
-    );
-  }
-
-  Widget historyCard() {
-    return card(
-      Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text(
-            'ประวัติการใช้งาน',
-            style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
-          ),
-          const SizedBox(height: 8),
-          if (history.isEmpty)
-            const Text('ยังไม่มีประวัติ')
-          else
-            ...history.map(
-              (item) => ListTile(
-                leading: const Icon(Icons.history, color: Colors.orange),
-                title: Text(item),
-              ),
-            ),
-        ],
-      ),
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFFFFF7EC),
-      body: SafeArea(
-        child: ListView(
-          padding: const EdgeInsets.all(18),
-          children: [
-            header(),
-            statusCard(),
-            feedCard(),
-            scheduleCard(),
-            historyCard(),
-          ],
-        ),
-      ),
-    );
+    lastFirebase = millis();
   }
 }
