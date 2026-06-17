@@ -1,11 +1,16 @@
 #include <WiFi.h>
 #include <WebServer.h>
+#include <HTTPClient.h>
+#include <WiFiClientSecure.h>
 #include "HX711.h"
 #include <ESP32Servo.h>
 
 // WiFi
-const char* ssid = "ชื่อWiFi";
-const char* password = "รหัสWiFi";
+const char* ssid = "ame";
+const char* password = "ame4166288";
+
+// Firebase Realtime Database URL
+String firebaseUrl = "https://smart-pet-feeder-9d2a2-default-rtdb.asia-southeast1.firebasedatabase.app";
 
 // Servo
 #define SERVO_PIN 14
@@ -18,8 +23,6 @@ int servoClose = 0;
 #define SCK 5
 HX711 scale;
 float calibration_factor = 1060.0;
-
-// ตัดค่ารบกวนของจานเปล่า
 const float NOISE_GRAM = 8.0;
 
 // HC-SR04
@@ -52,10 +55,7 @@ float getWeight() {
   float weight = scale.get_units(20);
 
   if (weight < 0) weight = 0;
-
-  if (weight < NOISE_GRAM) {
-    weight = 0;
-  }
+  if (weight < NOISE_GRAM) weight = 0;
 
   return weight;
 }
@@ -94,6 +94,112 @@ int getFoodLevelPercent() {
   return calculateFoodPercent(distance);
 }
 
+void updateFirebaseStatus(float weight, int foodLevel, float distance) {
+  if (WiFi.status() != WL_CONNECTED) return;
+
+  WiFiClientSecure client;
+  client.setInsecure();
+
+  HTTPClient http;
+
+  String url = firebaseUrl + "/device/status.json";
+
+  String json = "{";
+  json += "\"online\":true,";
+  json += "\"weight\":" + String(weight, 2) + ",";
+  json += "\"foodLevel\":" + String(foodLevel) + ",";
+  json += "\"distance\":" + String(distance, 1) + ",";
+  json += "\"feeding\":";
+  json += isFeeding ? "true" : "false";
+  json += "}";
+
+  http.begin(client, url);
+  http.addHeader("Content-Type", "application/json");
+
+  int code = http.PUT(json);
+
+  Serial.print("Firebase status code: ");
+  Serial.println(code);
+
+  http.end();
+}
+
+void resetFirebaseFeed() {
+  if (WiFi.status() != WL_CONNECTED) return;
+
+  WiFiClientSecure client;
+  client.setInsecure();
+
+  HTTPClient http;
+
+  String url = firebaseUrl + "/device/command/feed.json";
+
+  http.begin(client, url);
+  http.addHeader("Content-Type", "application/json");
+
+  int code = http.PUT("false");
+
+  Serial.print("Reset feed code: ");
+  Serial.println(code);
+
+  http.end();
+}
+
+int getAmountFromPayload(String payload) {
+  int amount = 50;
+
+  int index = payload.indexOf("\"amount\":");
+  if (index >= 0) {
+    String sub = payload.substring(index + 9);
+    amount = sub.toInt();
+  }
+
+  if (amount < 1) amount = 50;
+  if (amount > 300) amount = 300;
+
+  return amount;
+}
+
+void checkFirebaseCommand() {
+  if (WiFi.status() != WL_CONNECTED) return;
+  if (isFeeding) return;
+
+  WiFiClientSecure client;
+  client.setInsecure();
+
+  HTTPClient http;
+
+  String url = firebaseUrl + "/device/command.json";
+
+  http.begin(client, url);
+
+  int code = http.GET();
+
+  if (code == 200) {
+    String payload = http.getString();
+
+    Serial.print("Firebase command: ");
+    Serial.println(payload);
+
+    if (payload.indexOf("\"feed\":true") >= 0) {
+      int amount = getAmountFromPayload(payload);
+
+      Serial.println("Firebase Feed Command Received");
+      Serial.print("Amount: ");
+      Serial.println(amount);
+
+      feedFood(amount);
+
+      resetFirebaseFeed();
+    }
+  } else {
+    Serial.print("Firebase command read failed: ");
+    Serial.println(code);
+  }
+
+  http.end();
+}
+
 void feedFood(float targetGram) {
   if (isFeeding) return;
 
@@ -114,7 +220,6 @@ void feedFood(float targetGram) {
     Serial.println("Warning: Food level low");
   }
 
-  // ตั้งน้ำหนักจานเป็น 0 ก่อนให้อาหาร
   scale.tare(30);
   delay(300);
 
@@ -149,7 +254,14 @@ void feedFood(float targetGram) {
   closeServo();
 
   Serial.println("Feeding Done");
+
   isFeeding = false;
+
+  float distance = readDistanceCM();
+  int percent = calculateFoodPercent(distance);
+  float weight = getWeight();
+
+  updateFirebaseStatus(weight, percent, distance);
 }
 
 void handleStatus() {
@@ -227,7 +339,7 @@ void setup() {
   Serial.begin(115200);
   delay(1000);
 
-  Serial.println("Smart Pet Feeder Start");
+  Serial.println("Smart Pet Feeder Firebase Start");
 
   feederServo.attach(SERVO_PIN);
   closeServo();
@@ -272,14 +384,20 @@ void setup() {
 
   server.begin();
   Serial.println("Server started");
+
+  float distance = readDistanceCM();
+  int percent = calculateFoodPercent(distance);
+  float weight = getWeight();
+
+  updateFirebaseStatus(weight, percent, distance);
 }
 
 void loop() {
   server.handleClient();
 
-  static unsigned long lastPrint = 0;
+  static unsigned long lastFirebase = 0;
 
-  if (millis() - lastPrint >= 2000) {
+  if (millis() - lastFirebase >= 3000) {
     float distance = readDistanceCM();
     int percent = calculateFoodPercent(distance);
     float weight = getWeight();
@@ -292,6 +410,9 @@ void loop() {
     Serial.print(weight, 2);
     Serial.println(" g");
 
-    lastPrint = millis();
+    updateFirebaseStatus(weight, percent, distance);
+    checkFirebaseCommand();
+
+    lastFirebase = millis();
   }
 }
