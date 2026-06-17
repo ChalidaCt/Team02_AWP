@@ -1,9 +1,23 @@
+import 'dart:async';
 import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 
 import '../models/user_model.dart';
 import 'login_page.dart';
+
+class FeedingSchedule {
+  final String time;
+  final int amount;
+  bool enabled;
+
+  FeedingSchedule({
+    required this.time,
+    required this.amount,
+    this.enabled = true,
+  });
+}
 
 class DashboardPage extends StatefulWidget {
   final UserData user;
@@ -27,13 +41,24 @@ class _DashboardPageState extends State<DashboardPage> {
   bool isOnline = false;
   bool isFeeding = false;
 
-  final scheduleController = TextEditingController();
+  TimeOfDay selectedTime = TimeOfDay.now();
+
+  final List<FeedingSchedule> schedules = [];
+  final List<String> history = [];
+
+  Timer? scheduleTimer;
+  final Set<String> fedToday = {};
 
   @override
   void initState() {
     super.initState();
     checkEsp32Status();
     loadRealData();
+
+    scheduleTimer = Timer.periodic(
+      const Duration(seconds: 10),
+      (_) => checkScheduleAndFeed(),
+    );
   }
 
   Future<void> checkEsp32Status() async {
@@ -64,17 +89,12 @@ class _DashboardPageState extends State<DashboardPage> {
 
       if (levelResponse.statusCode == 200) {
         final levelData = jsonDecode(levelResponse.body);
-        setState(() {
-          foodLevel = int.tryParse(levelData['level'].toString()) ?? 0;
-        });
+        foodLevel = int.tryParse(levelData['level'].toString()) ?? 0;
       }
 
       if (weightResponse.statusCode == 200) {
         final weightData = jsonDecode(weightResponse.body);
-        setState(() {
-          currentWeight =
-              double.tryParse(weightData['weight'].toString()) ?? 0;
-        });
+        currentWeight = double.tryParse(weightData['weight'].toString()) ?? 0;
       }
 
       setState(() {
@@ -84,20 +104,18 @@ class _DashboardPageState extends State<DashboardPage> {
       setState(() {
         isOnline = false;
       });
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('ดึงข้อมูลจาก ESP32 ไม่ได้')),
-      );
     }
   }
 
-  Future<void> feedNow() async {
+  Future<void> feedNow({double? amount}) async {
+    final realAmount = amount ?? feedAmount;
+
     setState(() {
       isFeeding = true;
     });
 
     try {
-      final url = Uri.parse('$esp32Ip/feed?amount=${feedAmount.toInt()}');
+      final url = Uri.parse('$esp32Ip/feed?amount=${realAmount.toInt()}');
 
       final response = await http.get(url).timeout(
             const Duration(seconds: 25),
@@ -105,16 +123,16 @@ class _DashboardPageState extends State<DashboardPage> {
 
       if (response.statusCode == 200) {
         setState(() {
-          widget.user.history.insert(
+          history.insert(
             0,
-            'ให้อาหาร ${feedAmount.toInt()} กรัม สำเร็จ',
+            'ให้อาหาร ${realAmount.toInt()} กรัม สำเร็จ',
           );
         });
 
         await loadRealData();
 
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('สั่งให้อาหารสำเร็จ')),
+          SnackBar(content: Text('ให้อาหาร ${realAmount.toInt()} กรัม สำเร็จ')),
         );
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -124,7 +142,7 @@ class _DashboardPageState extends State<DashboardPage> {
     } catch (e) {
       setState(() {
         isOnline = false;
-        widget.user.history.insert(0, 'เชื่อมต่อ ESP32 ไม่ได้');
+        history.insert(0, 'เชื่อมต่อ ESP32 ไม่ได้');
       });
 
       ScaffoldMessenger.of(context).showSnackBar(
@@ -137,19 +155,71 @@ class _DashboardPageState extends State<DashboardPage> {
     });
   }
 
-  void addSchedule() {
-    final text = scheduleController.text.trim();
+  Future<void> pickTime() async {
+    final picked = await showTimePicker(
+      context: context,
+      initialTime: selectedTime,
+    );
 
-    if (text.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('กรุณากรอกเวลา เช่น 07:00 ให้อาหาร 50 กรัม')),
-      );
-      return;
+    if (picked != null) {
+      setState(() {
+        selectedTime = picked;
+      });
     }
+  }
+
+  String formatTime(TimeOfDay time) {
+    return '${time.hour.toString().padLeft(2, '0')}:${time.minute.toString().padLeft(2, '0')}';
+  }
+
+  void addSchedule() {
+    final time = formatTime(selectedTime);
 
     setState(() {
-      widget.user.schedules.add(text);
-      scheduleController.clear();
+      schedules.add(
+        FeedingSchedule(
+          time: time,
+          amount: feedAmount.toInt(),
+        ),
+      );
+    });
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('ตั้งเวลา $time สำเร็จ')),
+    );
+  }
+
+  void checkScheduleAndFeed() {
+    if (isFeeding) return;
+
+    final now = DateTime.now();
+    final currentTime =
+        '${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}';
+
+    final today =
+        '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
+
+    for (final item in schedules) {
+      final key = '$today-${item.time}';
+
+      if (item.enabled && item.time == currentTime && !fedToday.contains(key)) {
+        fedToday.add(key);
+
+        setState(() {
+          history.insert(
+            0,
+            'ถึงเวลา ${item.time} ให้อาหารอัตโนมัติ ${item.amount} กรัม',
+          );
+        });
+
+        feedNow(amount: item.amount.toDouble());
+      }
+    }
+  }
+
+  void deleteSchedule(FeedingSchedule item) {
+    setState(() {
+      schedules.remove(item);
     });
   }
 
@@ -164,7 +234,7 @@ class _DashboardPageState extends State<DashboardPage> {
 
   @override
   void dispose() {
-    scheduleController.dispose();
+    scheduleTimer?.cancel();
     super.dispose();
   }
 
@@ -321,7 +391,7 @@ class _DashboardPageState extends State<DashboardPage> {
             width: double.infinity,
             height: 52,
             child: ElevatedButton.icon(
-              onPressed: isFeeding ? null : feedNow,
+              onPressed: isFeeding ? null : () => feedNow(),
               icon: const Icon(Icons.restaurant),
               label: Text(isFeeding ? 'กำลังให้อาหาร...' : 'Feed Now'),
             ),
@@ -337,35 +407,110 @@ class _DashboardPageState extends State<DashboardPage> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const Text(
-            'ตั้งเวลาให้อาหาร',
+            'ตั้งเวลาให้อาหารจริง',
             style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
           ),
-          const SizedBox(height: 12),
-          TextField(
-            controller: scheduleController,
-            decoration: const InputDecoration(
-              labelText: 'เช่น 07:00 ให้อาหาร 50 กรัม',
-              prefixIcon: Icon(Icons.alarm),
-              border: OutlineInputBorder(),
+          const SizedBox(height: 14),
+
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: const Color(0xFFFFFAF4),
+              borderRadius: BorderRadius.circular(18),
+              border: Border.all(color: const Color(0xFFFFD7A8)),
+            ),
+            child: Row(
+              children: [
+                const CircleAvatar(
+                  backgroundColor: Colors.orange,
+                  child: Icon(Icons.schedule, color: Colors.white),
+                ),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Text(
+                    'เวลา: ${formatTime(selectedTime)} น.\nปริมาณ: ${feedAmount.toInt()} กรัม',
+                    style: const TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+                TextButton.icon(
+                  onPressed: pickTime,
+                  icon: const Icon(Icons.access_time),
+                  label: const Text('เลือกเวลา'),
+                ),
+              ],
             ),
           ),
-          const SizedBox(height: 10),
+
+          const SizedBox(height: 12),
+
           SizedBox(
             width: double.infinity,
+            height: 50,
             child: OutlinedButton.icon(
               onPressed: addSchedule,
               icon: const Icon(Icons.add),
               label: const Text('เพิ่มเวลาให้อาหาร'),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: Colors.orange,
+                side: const BorderSide(color: Colors.orange),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(18),
+                ),
+              ),
             ),
           ),
-          const SizedBox(height: 8),
-          if (widget.user.schedules.isEmpty)
+
+          const SizedBox(height: 16),
+
+          if (schedules.isEmpty)
             const Text('ยังไม่มีเวลาที่ตั้งไว้')
           else
-            ...widget.user.schedules.map(
-              (item) => ListTile(
-                leading: const Icon(Icons.alarm, color: Colors.orange),
-                title: Text(item),
+            ...schedules.map(
+              (item) => Container(
+                margin: const EdgeInsets.only(bottom: 10),
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFFFFAF4),
+                  borderRadius: BorderRadius.circular(18),
+                  border: Border.all(color: const Color(0xFFFFD7A8)),
+                ),
+                child: Row(
+                  children: [
+                    const CircleAvatar(
+                      backgroundColor: Colors.orange,
+                      child: Icon(Icons.alarm, color: Colors.white),
+                    ),
+                    const SizedBox(width: 14),
+                    Expanded(
+                      child: Text(
+                        '${item.time} น.\nให้อาหาร ${item.amount} กรัม',
+                        style: const TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                    Switch(
+                      value: item.enabled,
+                      activeColor: Colors.orange,
+                      onChanged: (value) {
+                        setState(() {
+                          item.enabled = value;
+                        });
+                      },
+                    ),
+                    IconButton(
+                      onPressed: () => deleteSchedule(item),
+                      icon: const Icon(
+                        Icons.delete_outline,
+                        color: Colors.red,
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
         ],
@@ -382,10 +527,11 @@ class _DashboardPageState extends State<DashboardPage> {
             'ประวัติการใช้งาน',
             style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
           ),
-          if (widget.user.history.isEmpty)
+          const SizedBox(height: 8),
+          if (history.isEmpty)
             const Text('ยังไม่มีประวัติ')
           else
-            ...widget.user.history.map(
+            ...history.map(
               (item) => ListTile(
                 leading: const Icon(Icons.history, color: Colors.orange),
                 title: Text(item),
@@ -414,4 +560,4 @@ class _DashboardPageState extends State<DashboardPage> {
       ),
     );
   }
-} 
+}
