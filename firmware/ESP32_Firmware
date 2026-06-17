@@ -4,8 +4,8 @@
 #include <ESP32Servo.h>
 
 // WiFi
-const char* ssid = "ame";
-const char* password = "ame4166288";
+const char* ssid = "ชื่อWiFi";
+const char* password = "รหัสWiFi";
 
 // Servo
 #define SERVO_PIN 14
