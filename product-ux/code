@@ -1,346 +1,176 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
 
-void main() {
-  runApp(const SmartPetFeederApp());
-}
+import '../models/user_model.dart';
+import 'login_page.dart';
 
-class SmartPetFeederApp extends StatelessWidget {
-  const SmartPetFeederApp({super.key});
+class DashboardPage extends StatefulWidget {
+  final UserData user;
 
-  @override
-  Widget build(BuildContext context) {
-    return MaterialApp(
-      debugShowCheckedModeBanner: false,
-      title: 'Smart Pet Feeder',
-      theme: ThemeData(
-        useMaterial3: true,
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.orange),
-      ),
-      home: const SplashScreen(),
-    );
-  }
-}
-
-// หน้าเริ่มต้น
-class SplashScreen extends StatefulWidget {
-  const SplashScreen({super.key});
+  const DashboardPage({
+    super.key,
+    required this.user,
+  });
 
   @override
-  State<SplashScreen> createState() => _SplashScreenState();
+  State<DashboardPage> createState() => _DashboardPageState();
 }
 
-class _SplashScreenState extends State<SplashScreen> {
+class _DashboardPageState extends State<DashboardPage> {
+  final String esp32Ip = 'http://172.20.10.4';
+
+  double currentWeight = 0;
+  double feedAmount = 50;
+  int foodLevel = 0;
+
+  bool isOnline = false;
+  bool isFeeding = false;
+
+  final scheduleController = TextEditingController();
+
   @override
   void initState() {
     super.initState();
-
-    Future.delayed(const Duration(seconds: 2), () {
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(builder: (context) => const LoginPage()),
-      );
-    });
+    checkEsp32Status();
+    loadRealData();
   }
 
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.orange,
-      body: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: const [
-            Icon(Icons.pets, size: 100, color: Colors.white),
-            SizedBox(height: 20),
-            Text(
-              'Smart Pet Feeder',
-              style: TextStyle(
-                fontSize: 30,
-                color: Colors.white,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            SizedBox(height: 10),
-            Text(
-              'เครื่องให้อาหารสัตว์อัจฉริยะ',
-              style: TextStyle(color: Colors.white, fontSize: 18),
-            ),
-          ],
-        ),
-      ),
-    );
+  Future<void> checkEsp32Status() async {
+    try {
+      final response = await http
+          .get(Uri.parse('$esp32Ip/status'))
+          .timeout(const Duration(seconds: 3));
+
+      setState(() {
+        isOnline = response.statusCode == 200;
+      });
+    } catch (e) {
+      setState(() {
+        isOnline = false;
+      });
+    }
   }
-}
 
-// หน้าเข้าสู่ระบบ
-class LoginPage extends StatefulWidget {
-  const LoginPage({super.key});
+  Future<void> loadRealData() async {
+    try {
+      final levelResponse = await http
+          .get(Uri.parse('$esp32Ip/level'))
+          .timeout(const Duration(seconds: 3));
 
-  @override
-  State<LoginPage> createState() => _LoginPageState();
-}
+      final weightResponse = await http
+          .get(Uri.parse('$esp32Ip/weight'))
+          .timeout(const Duration(seconds: 3));
 
-class _LoginPageState extends State<LoginPage> {
-  final emailController = TextEditingController();
-  final passwordController = TextEditingController();
+      if (levelResponse.statusCode == 200) {
+        final levelData = jsonDecode(levelResponse.body);
+        setState(() {
+          foodLevel = int.tryParse(levelData['level'].toString()) ?? 0;
+        });
+      }
 
-  void login() {
-    if (emailController.text.isNotEmpty && passwordController.text.isNotEmpty) {
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(builder: (context) => const HomePage()),
-      );
-    } else {
+      if (weightResponse.statusCode == 200) {
+        final weightData = jsonDecode(weightResponse.body);
+        setState(() {
+          currentWeight =
+              double.tryParse(weightData['weight'].toString()) ?? 0;
+        });
+      }
+
+      setState(() {
+        isOnline = true;
+      });
+    } catch (e) {
+      setState(() {
+        isOnline = false;
+      });
+
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('กรุณากรอกอีเมลและรหัสผ่าน')),
+        const SnackBar(content: Text('ดึงข้อมูลจาก ESP32 ไม่ได้')),
       );
     }
   }
 
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFFFFF3E0),
-      body: Center(
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Card(
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(24),
-            ),
-            child: Padding(
-              padding: const EdgeInsets.all(24),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Icon(Icons.pets, size: 80, color: Colors.orange),
-                  const SizedBox(height: 10),
-                  const Text(
-                    'เข้าสู่ระบบ',
-                    style: TextStyle(fontSize: 26, fontWeight: FontWeight.bold),
-                  ),
-                  const SizedBox(height: 20),
-                  TextField(
-                    controller: emailController,
-                    decoration: const InputDecoration(
-                      labelText: 'อีเมล',
-                      prefixIcon: Icon(Icons.email),
-                      border: OutlineInputBorder(),
-                    ),
-                  ),
-                  const SizedBox(height: 14),
-                  TextField(
-                    controller: passwordController,
-                    obscureText: true,
-                    decoration: const InputDecoration(
-                      labelText: 'รหัสผ่าน',
-                      prefixIcon: Icon(Icons.lock),
-                      border: OutlineInputBorder(),
-                    ),
-                  ),
-                  const SizedBox(height: 20),
-                  SizedBox(
-                    width: double.infinity,
-                    height: 50,
-                    child: ElevatedButton(
-                      onPressed: login,
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.orange,
-                        foregroundColor: Colors.white,
-                      ),
-                      child: const Text('เข้าสู่ระบบ'),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class FeedSchedule {
-  TimeOfDay time;
-  int amount;
-  bool enabled;
-
-  FeedSchedule({
-    required this.time,
-    required this.amount,
-    this.enabled = true,
-  });
-}
-
-// หน้าแอปหลัก
-class HomePage extends StatefulWidget {
-  const HomePage({super.key});
-
-  @override
-  State<HomePage> createState() => _HomePageState();
-}
-
-class _HomePageState extends State<HomePage> {
-  String petName = 'Lucky';
-  String deviceName = 'Smart Feeder 01';
-  String esp32Ip = '192.168.1.10';
-
-  int foodLevel = 75;
-  double foodAmount = 50;
-
-  final List<FeedSchedule> schedules = [
-    FeedSchedule(time: const TimeOfDay(hour: 8, minute: 0), amount: 50),
-    FeedSchedule(time: const TimeOfDay(hour: 18, minute: 0), amount: 80),
-  ];
-
-  final List<String> history = [
-    '08:00 น. ให้อาหาร 50 กรัม',
-    '18:00 น. ให้อาหาร 80 กรัม',
-  ];
-
-  String showTime(TimeOfDay time) {
-    return '${time.hour.toString().padLeft(2, '0')}:${time.minute.toString().padLeft(2, '0')} น.';
-  }
-
-  void feedNow() {
+  Future<void> feedNow() async {
     setState(() {
-      history.insert(0, 'ให้อาหารตอนนี้ ${foodAmount.toInt()} กรัม');
-      foodLevel = foodLevel >= 10 ? foodLevel - 10 : 0;
+      isFeeding = true;
     });
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('ให้อาหาร ${foodAmount.toInt()} กรัมแล้ว')),
-    );
-  }
+    try {
+      final url = Uri.parse('$esp32Ip/feed?amount=${feedAmount.toInt()}');
 
-  Future<void> addSchedule() async {
-    final time = await showTimePicker(
-      context: context,
-      initialTime: const TimeOfDay(hour: 8, minute: 0),
-    );
+      final response = await http.get(url).timeout(
+            const Duration(seconds: 25),
+          );
 
-    if (time == null) return;
+      if (response.statusCode == 200) {
+        setState(() {
+          widget.user.history.insert(
+            0,
+            'ให้อาหาร ${feedAmount.toInt()} กรัม สำเร็จ',
+          );
+        });
 
-    double tempAmount = foodAmount;
+        await loadRealData();
 
-    showDialog(
-      context: context,
-      builder: (context) {
-        return StatefulBuilder(
-          builder: (context, setDialogState) {
-            return AlertDialog(
-              title: const Text('เพิ่มเวลาให้อาหาร'),
-              content: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text('เวลา: ${showTime(time)}'),
-                  const SizedBox(height: 15),
-                  Text(
-                    '${tempAmount.toInt()} กรัม',
-                    style: const TextStyle(
-                      fontSize: 28,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.orange,
-                    ),
-                  ),
-                  Slider(
-                    value: tempAmount,
-                    min: 10,
-                    max: 1000,
-                    divisions: 99,
-                    label: '${tempAmount.toInt()} กรัม',
-                    activeColor: Colors.orange,
-                    onChanged: (value) {
-                      setDialogState(() {
-                        tempAmount = value;
-                      });
-                    },
-                  ),
-                  const Text('เลือกปริมาณ 10 - 1000 กรัม'),
-                ],
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.pop(context),
-                  child: const Text('ยกเลิก'),
-                ),
-                ElevatedButton(
-                  onPressed: () {
-                    setState(() {
-                      schedules.add(
-                        FeedSchedule(
-                          time: time,
-                          amount: tempAmount.toInt(),
-                        ),
-                      );
-                    });
-                    Navigator.pop(context);
-                  },
-                  child: const Text('บันทึก'),
-                ),
-              ],
-            );
-          },
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('สั่งให้อาหารสำเร็จ')),
         );
-      },
-    );
-  }
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('ESP32 ตอบกลับไม่สำเร็จ')),
+        );
+      }
+    } catch (e) {
+      setState(() {
+        isOnline = false;
+        widget.user.history.insert(0, 'เชื่อมต่อ ESP32 ไม่ได้');
+      });
 
-  void deleteSchedule(int index) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('เชื่อมต่อ ESP32 ไม่ได้')),
+      );
+    }
+
     setState(() {
-      schedules.removeAt(index);
+      isFeeding = false;
     });
   }
 
-  String nextFeedText() {
-    final active = schedules.where((item) => item.enabled).toList();
-    if (active.isEmpty) return 'ยังไม่ได้เปิดเวลา';
+  void addSchedule() {
+    final text = scheduleController.text.trim();
 
-    active.sort((a, b) {
-      final aMin = a.time.hour * 60 + a.time.minute;
-      final bMin = b.time.hour * 60 + b.time.minute;
-      return aMin.compareTo(bMin);
+    if (text.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('กรุณากรอกเวลา เช่น 07:00 ให้อาหาร 50 กรัม')),
+      );
+      return;
+    }
+
+    setState(() {
+      widget.user.schedules.add(text);
+      scheduleController.clear();
     });
-
-    return '${showTime(active.first.time)} | ${active.first.amount} กรัม';
   }
 
-  Widget header() {
-    return Container(
-      padding: const EdgeInsets.all(22),
-      margin: const EdgeInsets.only(bottom: 16),
-      decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          colors: [Color(0xFFFF9800), Color(0xFFFFB74D)],
-        ),
-        borderRadius: BorderRadius.circular(28),
-      ),
-      child: Row(
-        children: [
-          const CircleAvatar(
-            radius: 34,
-            backgroundColor: Colors.white,
-            child: Icon(Icons.pets, size: 42, color: Colors.orange),
-          ),
-          const SizedBox(width: 16),
-          Expanded(
-            child: Text(
-              'Smart Pet Feeder\nสัตว์เลี้ยง: $petName',
-              style: const TextStyle(
-                color: Colors.white,
-                fontSize: 21,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-          ),
-        ],
+  void logout() {
+    Navigator.pushReplacement(
+      context,
+      MaterialPageRoute(
+        builder: (_) => const LoginPage(),
       ),
     );
   }
 
-  Widget card({required Widget child}) {
+  @override
+  void dispose() {
+    scheduleController.dispose();
+    super.dispose();
+  }
+
+  Widget card(Widget child) {
     return Container(
+      width: double.infinity,
       padding: const EdgeInsets.all(18),
       margin: const EdgeInsets.only(bottom: 16),
       decoration: BoxDecoration(
@@ -348,5 +178,240 @@ class _HomePageState extends State<HomePage> {
         borderRadius: BorderRadius.circular(24),
         boxShadow: [
           BoxShadow(
-            color: Colors.orange.withOpacity(0.15),
-            blur
+            color: Colors.orange.withOpacity(0.12),
+            blurRadius: 12,
+            offset: const Offset(0, 6),
+          ),
+        ],
+      ),
+      child: child,
+    );
+  }
+
+  Widget header() {
+    return Container(
+      padding: const EdgeInsets.all(22),
+      margin: const EdgeInsets.only(bottom: 16),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFFB86C),
+        borderRadius: BorderRadius.circular(28),
+      ),
+      child: Row(
+        children: [
+          const CircleAvatar(
+            radius: 34,
+            backgroundColor: Colors.white,
+            child: Icon(Icons.pets, color: Colors.orange, size: 40),
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Text(
+              'Smart Pet Feeder\nผู้ใช้งาน: ${widget.user.username}',
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 20,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ),
+          IconButton(
+            onPressed: logout,
+            icon: const Icon(Icons.logout, color: Colors.white),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget statusCard() {
+    return card(
+      Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'สถานะเครื่องจริง',
+            style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Icon(
+                isOnline ? Icons.wifi : Icons.wifi_off,
+                color: isOnline ? Colors.green : Colors.red,
+              ),
+              const SizedBox(width: 8),
+              Text(
+                isOnline ? 'ESP32 ออนไลน์' : 'ESP32 ออฟไลน์',
+                style: TextStyle(
+                  color: isOnline ? Colors.green : Colors.red,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const Spacer(),
+              IconButton(
+                onPressed: () async {
+                  await checkEsp32Status();
+                  await loadRealData();
+                },
+                icon: const Icon(Icons.refresh),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text('IP เครื่อง: $esp32Ip'),
+          Text('น้ำหนักจาก Load Cell: ${currentWeight.toStringAsFixed(2)} กรัม'),
+          Text('อาหารในถังจาก HC-SR04: $foodLevel%'),
+          const SizedBox(height: 12),
+          LinearProgressIndicator(
+            value: foodLevel < 0 ? 0 : foodLevel / 100,
+            minHeight: 10,
+            color: foodLevel < 20 ? Colors.red : Colors.orange,
+            backgroundColor: const Color(0xFFFFE8CC),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            foodLevel < 0
+                ? 'อ่านค่า HC-SR04 ไม่ได้'
+                : foodLevel < 20
+                    ? 'อาหารใกล้หมด'
+                    : 'อาหารเพียงพอ',
+            style: TextStyle(
+              color: foodLevel < 20 ? Colors.red : Colors.green,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget feedCard() {
+    return card(
+      Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'ให้อาหารทันที',
+            style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(height: 12),
+          Center(
+            child: Text(
+              '${feedAmount.toInt()} กรัม',
+              style: const TextStyle(
+                fontSize: 36,
+                color: Colors.orange,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ),
+          Slider(
+            value: feedAmount,
+            min: 10,
+            max: 300,
+            divisions: 29,
+            activeColor: Colors.orange,
+            onChanged: (value) {
+              setState(() {
+                feedAmount = value;
+              });
+            },
+          ),
+          SizedBox(
+            width: double.infinity,
+            height: 52,
+            child: ElevatedButton.icon(
+              onPressed: isFeeding ? null : feedNow,
+              icon: const Icon(Icons.restaurant),
+              label: Text(isFeeding ? 'กำลังให้อาหาร...' : 'Feed Now'),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget scheduleCard() {
+    return card(
+      Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'ตั้งเวลาให้อาหาร',
+            style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(height: 12),
+          TextField(
+            controller: scheduleController,
+            decoration: const InputDecoration(
+              labelText: 'เช่น 07:00 ให้อาหาร 50 กรัม',
+              prefixIcon: Icon(Icons.alarm),
+              border: OutlineInputBorder(),
+            ),
+          ),
+          const SizedBox(height: 10),
+          SizedBox(
+            width: double.infinity,
+            child: OutlinedButton.icon(
+              onPressed: addSchedule,
+              icon: const Icon(Icons.add),
+              label: const Text('เพิ่มเวลาให้อาหาร'),
+            ),
+          ),
+          const SizedBox(height: 8),
+          if (widget.user.schedules.isEmpty)
+            const Text('ยังไม่มีเวลาที่ตั้งไว้')
+          else
+            ...widget.user.schedules.map(
+              (item) => ListTile(
+                leading: const Icon(Icons.alarm, color: Colors.orange),
+                title: Text(item),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget historyCard() {
+    return card(
+      Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'ประวัติการใช้งาน',
+            style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+          ),
+          if (widget.user.history.isEmpty)
+            const Text('ยังไม่มีประวัติ')
+          else
+            ...widget.user.history.map(
+              (item) => ListTile(
+                leading: const Icon(Icons.history, color: Colors.orange),
+                title: Text(item),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: const Color(0xFFFFF7EC),
+      body: SafeArea(
+        child: ListView(
+          padding: const EdgeInsets.all(18),
+          children: [
+            header(),
+            statusCard(),
+            feedCard(),
+            scheduleCard(),
+            historyCard(),
+          ],
+        ),
+      ),
+    );
+  }
+} 
