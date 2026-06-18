@@ -122,6 +122,7 @@ Prototype v1 ยังเชื่อม Hardware และ Dashboard แบบ 
 | ปรับปุ่ม Feed ให้ชัดเจน | เพิ่ม Animation | เชื่อม Hardware จริง
 
 ## demo link
+https://drive.google.com/file/d/103fV-mGnuMkR0mcY2YGXWoH4fNP4NW6k/view?usp=sharing
 
 
 
