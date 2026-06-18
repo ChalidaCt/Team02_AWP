@@ -1,1 +1,8 @@
-
+| รายการ | สถานะ | หลักฐาน / Link |
+| --- | --- | --- |
+| Prototype เปิดดูหรือทดลองได้ | Ready  | https://superlative-kheer-11d7ce.netlify.app/ |
+| Core Flow หลักยังอยู่ครบ | Partly Ready  | https://github.com/ChalidaCt/Team02_AWP/blob/main/docs/core-flow.md |
+| มี demo link / file / device / Figma / notebook | Ready | https://drive.google.com/file/d/1usdzft7huyLqDOEhQYjQkRkTy-3QWoeN/view?usp=drive_link |
+| มี known issues ที่ทีมรู้อยู่แล้ว | มี  | https://github.com/ChalidaCt/Team02_AWP/blob/main/README.md |
+| มี workaround ถ้าระบบพัง | ไม่มี | - |
+| ผู้ใช้สามารถลอง task ได้โดยไม่ต้องอธิบายยาว | Not Ready | - |
