@@ -1,0 +1,534 @@
+import 'dart:async';
+
+import 'package:flutter/material.dart';
+import 'package:firebase_database/firebase_database.dart';
+
+import '../models/user_model.dart';
+import 'login_page.dart';
+
+class FeedingSchedule {
+  final String time;
+  final int amount;
+  bool enabled;
+
+  FeedingSchedule({
+    required this.time,
+    required this.amount,
+    this.enabled = true,
+  });
+}
+
+class DashboardPage extends StatefulWidget {
+  final UserData user;
+
+  const DashboardPage({
+    super.key,
+    required this.user,
+  });
+
+  @override
+  State<DashboardPage> createState() => _DashboardPageState();
+}
+
+class _DashboardPageState extends State<DashboardPage> {
+  final DatabaseReference database = FirebaseDatabase.instance.ref();
+
+  double currentWeight = 0;
+  double feedAmount = 50;
+  int foodLevel = 0;
+
+  bool isOnline = false;
+  bool isFeeding = false;
+
+  TimeOfDay selectedTime = TimeOfDay.now();
+
+  final List<FeedingSchedule> schedules = [];
+  final List<String> history = [];
+
+  Timer? scheduleTimer;
+  StreamSubscription<DatabaseEvent>? statusSubscription;
+
+  final Set<String> fedToday = {};
+
+  @override
+  void initState() {
+    super.initState();
+    listenFirebaseStatus();
+
+    scheduleTimer = Timer.periodic(
+      const Duration(seconds: 10),
+      (_) => checkScheduleAndFeed(),
+    );
+  }
+
+  void listenFirebaseStatus() {
+    statusSubscription = database.child('device/status').onValue.listen((event) {
+      final data = event.snapshot.value;
+
+      if (data == null) return;
+
+      final map = Map<dynamic, dynamic>.from(data as Map);
+
+      setState(() {
+        isOnline = map['online'] == true;
+        currentWeight =
+            double.tryParse(map['weight'].toString()) ?? 0;
+        foodLevel =
+            int.tryParse(map['foodLevel'].toString()) ?? 0;
+      });
+    });
+  }
+
+  Future<void> refreshStatus() async {
+    final snapshot = await database.child('device/status').get();
+
+    if (!snapshot.exists || snapshot.value == null) {
+      setState(() {
+        isOnline = false;
+      });
+      return;
+    }
+
+    final map = Map<dynamic, dynamic>.from(snapshot.value as Map);
+
+    setState(() {
+      isOnline = map['online'] == true;
+      currentWeight = double.tryParse(map['weight'].toString()) ?? 0;
+      foodLevel = int.tryParse(map['foodLevel'].toString()) ?? 0;
+    });
+  }
+
+  Future<void> feedNow({double? amount}) async {
+    final realAmount = amount ?? feedAmount;
+
+    setState(() {
+      isFeeding = true;
+    });
+
+    try {
+      await database.child('device/command').update({
+        'feed': true,
+        'amount': realAmount.toInt(),
+      });
+
+      setState(() {
+        history.insert(
+          0,
+          'ส่งคำสั่งให้อาหาร ${realAmount.toInt()} กรัม ไปที่ Firebase',
+        );
+      });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('ส่งคำสั่งให้อาหาร ${realAmount.toInt()} กรัมแล้ว'),
+        ),
+      );
+    } catch (e) {
+      setState(() {
+        history.insert(0, 'ส่งคำสั่ง Firebase ไม่สำเร็จ');
+      });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('ส่งคำสั่ง Firebase ไม่สำเร็จ')),
+      );
+    }
+
+    setState(() {
+      isFeeding = false;
+    });
+  }
+
+  Future<void> pickTime() async {
+    final picked = await showTimePicker(
+      context: context,
+      initialTime: selectedTime,
+    );
+
+    if (picked != null) {
+      setState(() {
+        selectedTime = picked;
+      });
+    }
+  }
+
+  String formatTime(TimeOfDay time) {
+    return '${time.hour.toString().padLeft(2, '0')}:${time.minute.toString().padLeft(2, '0')}';
+  }
+
+  void addSchedule() {
+    final time = formatTime(selectedTime);
+
+    setState(() {
+      schedules.add(
+        FeedingSchedule(
+          time: time,
+          amount: feedAmount.toInt(),
+        ),
+      );
+    });
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('ตั้งเวลา $time สำเร็จ')),
+    );
+  }
+
+  void checkScheduleAndFeed() {
+    if (isFeeding) return;
+
+    final now = DateTime.now();
+
+    final currentTime =
+        '${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}';
+
+    final today =
+        '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
+
+    for (final item in schedules) {
+      final key = '$today-${item.time}';
+
+      if (item.enabled && item.time == currentTime && !fedToday.contains(key)) {
+        fedToday.add(key);
+
+        setState(() {
+          history.insert(
+            0,
+            'ถึงเวลา ${item.time} ให้อาหารอัตโนมัติ ${item.amount} กรัม',
+          );
+        });
+
+        feedNow(amount: item.amount.toDouble());
+      }
+    }
+  }
+
+  void deleteSchedule(FeedingSchedule item) {
+    setState(() {
+      schedules.remove(item);
+    });
+  }
+
+  void logout() {
+    Navigator.pushReplacement(
+      context,
+      MaterialPageRoute(
+        builder: (_) => const LoginPage(),
+      ),
+    );
+  }
+
+  @override
+  void dispose() {
+    scheduleTimer?.cancel();
+    statusSubscription?.cancel();
+    super.dispose();
+  }
+
+  Widget emojiCircle(String emoji, {double size = 34}) {
+    return CircleAvatar(
+      radius: size,
+      backgroundColor: Colors.white,
+      child: Text(
+        emoji,
+        style: TextStyle(fontSize: size),
+      ),
+    );
+  }
+
+  Widget card(Widget child) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(18),
+      margin: const EdgeInsets.only(bottom: 16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(24),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.orange.withOpacity(0.12),
+            blurRadius: 12,
+            offset: const Offset(0, 6),
+          ),
+        ],
+      ),
+      child: child,
+    );
+  }
+
+  Widget header() {
+    return Container(
+      padding: const EdgeInsets.all(22),
+      margin: const EdgeInsets.only(bottom: 16),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFFB86C),
+        borderRadius: BorderRadius.circular(28),
+      ),
+      child: Row(
+        children: [
+          emojiCircle('🐱', size: 34),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Text(
+              'Smart Pet Feeder\nผู้ใช้งาน: ${widget.user.username}',
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 20,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ),
+          IconButton(
+            onPressed: logout,
+            icon: const Text('🚪', style: TextStyle(fontSize: 26)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget statusCard() {
+    return card(
+      Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            '🐱 สถานะเครื่องจริง',
+            style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Text(isOnline ? '🟢' : '🔴', style: const TextStyle(fontSize: 22)),
+              const SizedBox(width: 8),
+              Text(
+                isOnline ? 'ESP32 ออนไลน์ผ่าน Firebase' : 'ESP32 ออฟไลน์',
+                style: TextStyle(
+                  color: isOnline ? Colors.green : Colors.red,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const Spacer(),
+              IconButton(
+                onPressed: refreshStatus,
+                icon: const Text('🔄', style: TextStyle(fontSize: 24)),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          const Text('🌐 เชื่อมต่อผ่าน Firebase Realtime Database'),
+          Text('⚖️ น้ำหนักจาก Load Cell: ${currentWeight.toStringAsFixed(2)} กรัม'),
+          Text('📡 อาหารในถังจาก HC-SR04: $foodLevel%'),
+          const SizedBox(height: 12),
+          LinearProgressIndicator(
+            value: foodLevel < 0 ? 0 : foodLevel / 100,
+            minHeight: 10,
+            color: foodLevel < 20 ? Colors.red : Colors.orange,
+            backgroundColor: const Color(0xFFFFE8CC),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            foodLevel < 0
+                ? '⚠️ อ่านค่า HC-SR04 ไม่ได้'
+                : foodLevel < 20
+                    ? '🚨 อาหารใกล้หมด'
+                    : '✅ อาหารเพียงพอ',
+            style: TextStyle(
+              color: foodLevel < 20 ? Colors.red : Colors.green,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget feedCard() {
+    return card(
+      Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            '🐟 ให้อาหารทันที',
+            style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(height: 12),
+          Center(
+            child: Text(
+              '${feedAmount.toInt()} กรัม',
+              style: const TextStyle(
+                fontSize: 36,
+                color: Colors.orange,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ),
+          Slider(
+            value: feedAmount,
+            min: 10,
+            max: 300,
+            divisions: 29,
+            activeColor: Colors.orange,
+            onChanged: (value) {
+              setState(() {
+                feedAmount = value;
+              });
+            },
+          ),
+          SizedBox(
+            width: double.infinity,
+            height: 52,
+            child: ElevatedButton(
+              onPressed: isFeeding ? null : () => feedNow(),
+              child: Text(
+                isFeeding ? '⏳ กำลังส่งคำสั่ง...' : '🐾 Feed Now',
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget scheduleCard() {
+    return card(
+      Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            '🐱 ตั้งเวลาให้อาหารจริง',
+            style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(height: 14),
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: const Color(0xFFFFFAF4),
+              borderRadius: BorderRadius.circular(18),
+              border: Border.all(color: const Color(0xFFFFD7A8)),
+            ),
+            child: Row(
+              children: [
+                emojiCircle('⏰', size: 26),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Text(
+                    'เวลา: ${formatTime(selectedTime)} น.\nปริมาณ: ${feedAmount.toInt()} กรัม',
+                    style: const TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+                TextButton(
+                  onPressed: pickTime,
+                  child: const Text('🕒 เลือกเวลา'),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 12),
+          SizedBox(
+            width: double.infinity,
+            height: 50,
+            child: OutlinedButton(
+              onPressed: addSchedule,
+              style: OutlinedButton.styleFrom(
+                foregroundColor: Colors.orange,
+                side: const BorderSide(color: Colors.orange),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(18),
+                ),
+              ),
+              child: const Text('➕ เพิ่มเวลาให้อาหาร'),
+            ),
+          ),
+          const SizedBox(height: 16),
+          if (schedules.isEmpty)
+            const Text('📅 ยังไม่มีเวลาที่ตั้งไว้')
+          else
+            ...schedules.map(
+              (item) => Container(
+                margin: const EdgeInsets.only(bottom: 10),
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFFFFAF4),
+                  borderRadius: BorderRadius.circular(18),
+                  border: Border.all(color: const Color(0xFFFFD7A8)),
+                ),
+                child: Row(
+                  children: [
+                    emojiCircle('🐱', size: 24),
+                    const SizedBox(width: 14),
+                    Expanded(
+                      child: Text(
+                        '${item.time} น.\nให้อาหาร ${item.amount} กรัม',
+                        style: const TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                    Switch(
+                      value: item.enabled,
+                      activeColor: Colors.orange,
+                      onChanged: (value) {
+                        setState(() {
+                          item.enabled = value;
+                        });
+                      },
+                    ),
+                    IconButton(
+                      onPressed: () => deleteSchedule(item),
+                      icon: const Text('🗑️', style: TextStyle(fontSize: 22)),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget historyCard() {
+    return card(
+      Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            '🐾 ประวัติการใช้งาน',
+            style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(height: 8),
+          if (history.isEmpty)
+            const Text('ยังไม่มีประวัติ')
+          else
+            ...history.map(
+              (item) => ListTile(
+                leading: const Text('🐱', style: TextStyle(fontSize: 22)),
+                title: Text(item),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: const Color(0xFFFFF7EC),
+      body: SafeArea(
+        child: ListView(
+          padding: const EdgeInsets.all(18),
+          children: [
+            header(),
+            statusCard(),
+            feedCard(),
+            scheduleCard(),
+            historyCard(),
+          ],
+        ),
+      ),
+    );
+  }
+}

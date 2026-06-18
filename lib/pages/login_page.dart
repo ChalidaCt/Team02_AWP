@@ -1,0 +1,252 @@
+import 'package:flutter/material.dart';
+import '../services/mock_database.dart';
+import 'register_page.dart';
+import 'forgot_password_page.dart';
+import 'dashboard_page.dart';
+
+class LoginPage extends StatefulWidget {
+  const LoginPage({super.key});
+
+  @override
+  State<LoginPage> createState() => _LoginPageState();
+}
+
+class _LoginPageState extends State<LoginPage> {
+  final usernameController = TextEditingController();
+  final passwordController = TextEditingController();
+
+  bool hidePassword = true;
+
+  void login() {
+    final username = usernameController.text.trim();
+    final password = passwordController.text.trim();
+
+    final user = MockDatabase.login(username, password);
+
+    if (user == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('ชื่อผู้ใช้งานหรือรหัสผ่านไม่ถูกต้อง')),
+      );
+      return;
+    }
+
+    Navigator.pushReplacement(
+      context,
+      MaterialPageRoute(
+        builder: (_) => DashboardPage(user: user),
+      ),
+    );
+  }
+
+  @override
+  void dispose() {
+    usernameController.dispose();
+    passwordController.dispose();
+    super.dispose();
+  }
+
+  Widget inputField({
+    required TextEditingController controller,
+    required String label,
+    required String emoji,
+    bool isPassword = false,
+  }) {
+    return TextField(
+      controller: controller,
+      obscureText: isPassword ? hidePassword : false,
+      decoration: InputDecoration(
+        labelText: label,
+        prefixIcon: Padding(
+          padding: const EdgeInsets.all(13),
+          child: Text(emoji, style: const TextStyle(fontSize: 22)),
+        ),
+        suffixIcon: isPassword
+            ? IconButton(
+                icon: Text(
+                  hidePassword ? '🙈' : '👀',
+                  style: const TextStyle(fontSize: 22),
+                ),
+                onPressed: () {
+                  setState(() {
+                    hidePassword = !hidePassword;
+                  });
+                },
+              )
+            : null,
+        filled: true,
+        fillColor: const Color(0xFFFFFAF4),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(18),
+          borderSide: const BorderSide(color: Color(0xFFFFD7A8)),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(18),
+          borderSide: const BorderSide(color: Colors.orange, width: 2),
+        ),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(18),
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: const Color(0xFFFFF7EC),
+      body: SafeArea(
+        child: Center(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(20),
+            child: Container(
+              constraints: const BoxConstraints(maxWidth: 430),
+              padding: const EdgeInsets.all(22),
+              decoration: BoxDecoration(
+                color: const Color(0xFFFFF1E6),
+                borderRadius: BorderRadius.circular(30),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.orange.withOpacity(0.15),
+                    blurRadius: 22,
+                    offset: const Offset(0, 10),
+                  ),
+                ],
+              ),
+              child: Column(
+                children: [
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(24),
+                    child: Image.network(
+                      'https://images.unsplash.com/photo-1519052537078-e6302a4968d4?w=900',
+                      height: 190,
+                      width: double.infinity,
+                      fit: BoxFit.cover,
+                    ),
+                  ),
+
+                  const SizedBox(height: 20),
+
+                  const Text(
+                    '🐱',
+                    style: TextStyle(fontSize: 54),
+                  ),
+
+                  const Text(
+                    'Smart Pet Feeder',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: 30,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.orange,
+                    ),
+                  ),
+
+                  const SizedBox(height: 6),
+
+                  const Text(
+                    'ระบบให้อาหารน้องแมวอัจฉริยะ',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: 15,
+                      color: Colors.black54,
+                    ),
+                  ),
+
+                  const SizedBox(height: 28),
+
+                  inputField(
+                    controller: usernameController,
+                    label: 'ชื่อผู้ใช้งาน',
+                    emoji: '🐱',
+                  ),
+
+                  const SizedBox(height: 14),
+
+                  inputField(
+                    controller: passwordController,
+                    label: 'รหัสผ่าน',
+                    emoji: '🔐',
+                    isPassword: true,
+                  ),
+
+                  const SizedBox(height: 22),
+
+                  SizedBox(
+                    width: double.infinity,
+                    height: 54,
+                    child: ElevatedButton(
+                      onPressed: login,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.orange,
+                        foregroundColor: Colors.white,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(18),
+                        ),
+                      ),
+                      child: const Text(
+                        '🐾 เข้าสู่ระบบ',
+                        style: TextStyle(fontSize: 18),
+                      ),
+                    ),
+                  ),
+
+                  const SizedBox(height: 10),
+
+                  TextButton(
+                    onPressed: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => const ForgotPasswordPage(),
+                        ),
+                      );
+                    },
+                    child: const Text(
+                      'ลืมรหัสผ่าน?',
+                      style: TextStyle(color: Colors.brown),
+                    ),
+                  ),
+
+                  TextButton(
+                    onPressed: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => const RegisterPage(),
+                        ),
+                      );
+                    },
+                    child: const Text(
+                      'ยังไม่มีบัญชี? สมัครสมาชิก',
+                      style: TextStyle(color: Colors.brown),
+                    ),
+                  ),
+
+                  const SizedBox(height: 8),
+
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFFFFAF4),
+                      borderRadius: BorderRadius.circular(18),
+                      border: Border.all(color: const Color(0xFFFFD7A8)),
+                    ),
+                    child: const Text(
+                      'ทดลองเข้าใช้\nusername: user\npassword: 1234',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        color: Colors.black45,
+                        fontSize: 13,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
